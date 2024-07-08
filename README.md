@@ -1,4 +1,5 @@
 Project Overview
+
 In this project, my team and I conducted a comprehensive analysis of four prospective clients' asset portfolios selected by using random sampling from our database. We focused on providing detailed insights and recommendations based on the most recent 12-month (12M), 18-month (18M), and 24-month (24M) returns for each securities house and the entire portfolio of each client.
 
 Analysis and Findings
