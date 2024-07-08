@@ -1,0 +1,210 @@
+/* ---------------------------------------------------------------------------------
+Use database 'invest'
+---------------------------------------------------------------------------------  */
+USE invest;
+
+/* ---------------------------------------------------------------------------------
+Preparation for making queries
+・ Extract four account names at random as samples for our analysis
+・ Code: SELECT customer_id FROM invest.customer_details ORDER BY RAND() LIMIT 4;
+・ Result: Extract four customers (77, 254, 525, 860) from the "customer_id" column
+---------------------------------------------------------------------------------  */
+
+/* ---------------------------------------------------------------------------------
+For db1
+・ Join the relevant tables
+・ Sort data for the last 3 years as recent years
+・ Sort customer_id = 77 or 254 or 525 or 860 as one of four samples showed above
+・ Sort adjusted prices
+・ Fixed typographical errors in major_asset_class
+・ Create daily lagged_price
+・ Create total amount of value (value * quantity)
+---------------------------------------------------------------------------------  */
+WITH db1 AS (
+SELECT cd.full_name, 
+       cd.customer_id,
+       ad.acct_open_date,
+       CASE WHEN sm.major_asset_class = 'equty' THEN 'equity'
+            WHEN sm.major_asset_class = 'fixed income' THEN 'fixed_income'
+            WHEN sm.major_asset_class = 'fixed income corporate' THEN 'fixed_income'
+            ELSE sm.major_asset_class END AS major_asset_class, 
+       sm.minor_asset_class, 
+       pd.ticker, 
+       sm.security_name, 
+       hc.quantity, 
+       pd.date,
+       pd.value,
+       LAG(pd.value, 1) OVER(PARTITION BY pd.ticker ORDER BY pd.date) AS lagged_price_daily,
+       hc.quantity * pd.value AS amount
+FROM account_dim AS ad
+JOIN customer_details AS cd
+ON  ad.client_id = cd.customer_id
+JOIN holdings_current AS hc
+ON ad.account_id = hc.account_id
+JOIN security_masterlist AS sm
+ON sm.ticker = hc.ticker
+JOIN pricing_daily_new AS pd
+ON pd.ticker = sm.ticker
+WHERE cd.customer_id IN ('77') -- '77' or '254' or '525' or '860'
+  AND pd.date BETWEEN '2019-09-09' AND '2022-09-09'
+  AND pd.price_type = 'Adjusted'
+),
+
+/* ---------------------------------------------------------------------------------
+For db2
+・ Aggregate returns (12, 18, 24 months) and weights for each of the securities
+・ Calculate sigma (12 months) as risk
+・ Calculate risk-adjusted return (12 months)
+---------------------------------------------------------------------------------  */
+db2 AS (
+SELECT customer_id,
+       full_name,
+       major_asset_class,
+       ticker,
+       security_name,
+       AVG((value - lagged_price_daily) / lagged_price_daily) * SQRT(250) AS return_12m,
+       AVG((value - lagged_price_daily) / lagged_price_daily) * SQRT(375) AS return_18m,
+       AVG((value - lagged_price_daily) / lagged_price_daily) * SQRT(500) AS return_24m,
+       SUM(amount / (SELECT SUM(amount) FROM db1)) AS weight,
+       STD((value - lagged_price_daily) / lagged_price_daily) * SQRT(250) AS sigma_12m,
+       (AVG((value - lagged_price_daily) / lagged_price_daily) / 
+       STD((value - lagged_price_daily) / lagged_price_daily)) AS risk_adjusted_return_12m
+FROM db1
+GROUP BY ticker
+ORDER BY return_12m DESC
+),
+
+/* ---------------------------------------------------------------------------------
+For db3
+・ Aggregate the return (12 months) for the entire portfolio (customer_id = '77')
+---------------------------------------------------------------------------------  */
+db3 AS (
+SELECT customer_id,
+       full_name,
+       SUM(return_12m * weight) AS return_12m,
+       SUM(sigma_12m * weight) AS sigma_12m,
+       SUM(risk_adjusted_return_12m * weight) AS risk_adjusted_return_12m
+FROM db2
+),
+
+/* ---------------------------------------------------------------------------------
+For db4
+・ Calculate daily returns per ticker per date
+---------------------------------------------------------------------------------  */
+db4 AS (
+SELECT customer_id,
+       full_name,
+       major_asset_class,
+       ticker,
+       date,
+       AVG((value - lagged_price_daily) / lagged_price_daily) AS return_1d
+FROM db1
+WHERE date > '2019-09-09'
+GROUP BY ticker, date
+HAVING return_1d IS NOT NULL
+ORDER BY date
+),
+
+/* ---------------------------------------------------------------------------------
+For db5
+・ Create a table showing average returns daily for each major_asset_class
+---------------------------------------------------------------------------------  */
+db5 AS (
+SELECT date,
+       AVG(CASE WHEN major_asset_class = 'equity' THEN return_1d END) AS return_equity,
+       AVG(CASE WHEN major_asset_class = 'commodities' THEN return_1d END) AS return_commodities,
+       AVG(CASE WHEN major_asset_class = 'fixed_income' THEN return_1d END) AS return_fixed_income,
+       AVG(CASE WHEN major_asset_class = 'alternatives' THEN return_1d END) AS return_alternatives
+FROM db4
+GROUP BY date
+ORDER BY date
+),
+
+/* ---------------------------------------------------------------------------------
+For db6
+・ Calculate correlation coefficients for all combinations of each asset class
+・ Stand for correlation coefficient abbreviated as r
+---------------------------------------------------------------------------------  */
+db6 AS (
+SELECT -- r between "return_equity" and "return_commodities"
+       FORMAT(
+       (COUNT(*) * SUM(return_equity * return_commodities) - SUM(return_equity) * SUM(return_commodities)) / 
+       (SQRT(COUNT(*) * SUM(return_equity * return_equity) - SUM(return_equity) * SUM(return_equity)) * 
+        SQRT(COUNT(*) * SUM(return_commodities * return_commodities) - SUM(return_commodities) * SUM(return_commodities))), 3) AS r_equity_commodities,
+       -- r between "return_equity" and "return_fixed_income"
+       FORMAT(
+       (COUNT(*) * SUM(return_equity * return_fixed_income) - SUM(return_equity) * SUM(return_fixed_income)) / 
+       (SQRT(COUNT(*) * SUM(return_equity * return_equity) - SUM(return_equity) * SUM(return_equity)) * 
+        SQRT(COUNT(*) * SUM(return_fixed_income * return_fixed_income) - SUM(return_fixed_income) * SUM(return_fixed_income))), 3) AS r_equity_fixed_income,
+       -- r between "return_equity" and "return_alternatives"
+       FORMAT(
+       (COUNT(*) * SUM(return_equity * return_alternatives) - SUM(return_equity) * SUM(return_alternatives)) / 
+       (SQRT(COUNT(*) * SUM(return_equity * return_equity) - SUM(return_equity) * SUM(return_equity)) * 
+        SQRT(COUNT(*) * SUM(return_alternatives * return_alternatives) - SUM(return_alternatives) * SUM(return_alternatives))), 3) AS r_equity_alternatives, 
+       -- r between "return_commodities" and "return_fixed_income"
+       FORMAT(
+       (COUNT(*) * SUM(return_commodities * return_fixed_income) - SUM(return_commodities) * SUM(return_fixed_income)) / 
+       (SQRT(COUNT(*) * SUM(return_commodities * return_commodities) - SUM(return_commodities) * SUM(return_commodities)) * 
+        SQRT(COUNT(*) * SUM(return_fixed_income * return_fixed_income) - SUM(return_fixed_income) * SUM(return_fixed_income))), 3) AS r_commodities_fixed_income,
+       -- r between "return_commodities" and "return_alternatives"
+       FORMAT(
+       (COUNT(*) * SUM(return_commodities * return_alternatives) - SUM(return_commodities) * SUM(return_alternatives)) / 
+       (SQRT(COUNT(*) * SUM(return_commodities * return_commodities) - SUM(return_commodities) * SUM(return_commodities)) * 
+        SQRT(COUNT(*) * SUM(return_alternatives * return_alternatives) - SUM(return_alternatives) * SUM(return_alternatives))), 3) AS r_commodities_alternatives,
+       -- r between "return_fixed_income" and "return_alternatives"
+       FORMAT(
+       (COUNT(*) * SUM(return_fixed_income * return_alternatives) - SUM(return_fixed_income) * SUM(return_alternatives)) / 
+       (SQRT(COUNT(*) * SUM(return_fixed_income * return_fixed_income) - SUM(return_fixed_income) * SUM(return_fixed_income)) * 
+        SQRT(COUNT(*) * SUM(return_alternatives * return_alternatives) - SUM(return_alternatives) * SUM(return_alternatives))), 3) AS r_fixed_income_alternatives
+FROM db5
+),
+
+/* ---------------------------------------------------------------------------------
+For db7
+・ Create a cross table of correlation coefficients between each asset class
+---------------------------------------------------------------------------------  */
+db7 AS (
+-- 1st row of the cross table
+SELECT CASE WHEN r_equity_commodities IS NOT NULL THEN 'equity' END AS CORRELATION,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN 1.000 END AS equity,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_equity_commodities END AS commodities,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_equity_fixed_income END AS fixed_income,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_equity_alternatives END AS alternatives
+FROM db6
+-- 2nd row of the cross table
+UNION
+SELECT CASE WHEN r_equity_commodities IS NOT NULL THEN 'commodities' END AS CORRELATION,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_equity_commodities END AS equity,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN 1.000 END AS commodities,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_commodities_fixed_income END AS fixed_income,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_commodities_alternatives END AS alternatives
+FROM db6
+-- 3rd row of the cross table
+UNION
+SELECT CASE WHEN r_equity_commodities IS NOT NULL THEN 'fixed_income' END AS CORRELATION,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_equity_fixed_income END AS equity,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_commodities_fixed_income END AS commodities,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN 1.000 END AS fixed_income,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_fixed_income_alternatives END AS alternatives
+FROM db6
+-- 4th row of the cross table
+UNION
+SELECT CASE WHEN r_equity_commodities IS NOT NULL THEN 'alternatives' END AS CORRELATION,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_equity_alternatives END AS equity,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_commodities_alternatives END AS commodities,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN r_fixed_income_alternatives END AS fixed_income,
+       CASE WHEN r_equity_commodities IS NOT NULL THEN 1.000 END AS alternatives
+FROM db6
+)
+
+
+/* ---------------------------------------------------------------------------------
+Outputs of results
+・ db2: Latest 12M, 18M, 24M return for each of the securities (Q1)
+        Latest 12M sigma and risk-adjusted return for each of the securities (Q3-5)
+・ db3: Latest 12M, 18M, 24M return for the entire portfolio (Q1)
+・ db7: Correlations between majorasset classes (Q2)
+---------------------------------------------------------------------------------  */
+SELECT *
+FROM db7 -- Outputs: db2, db3, db7
+;
