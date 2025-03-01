@@ -1,19 +1,45 @@
 Project Overview
+I analyzed the performance of four prospective clients’ asset portfolios. I selected these clients using random sampling from an investment database and focused on their portfolio returns over the past 12 months (12M), 18 months (18M), and 24 months (24M). By breaking down each portfolio’s returns and risk profile, I helped pinpoint opportunities for higher gains and minimized risk.
 
-In this project, my team and I conducted a comprehensive analysis of four prospective clients' asset portfolios selected by using random sampling from our database. We focused on providing detailed insights and recommendations based on the most recent 12-month (12M), 18-month (18M), and 24-month (24M) returns for each securities house and the entire portfolio of each client.
+My Role & Technical Contributions
 
-Analysis and Findings
+Data Gathering and Cleanup
+I used Python to connect to the internal database, retrieving raw data for each client’s current holdings. In the process, I handled missing values and merged separate datasets—from market indices to specific securities—into one cohesive data source.
 
-Return Analysis: We meticulously calculated and analyzed the returns for the most recent 12M, 18M, and 24M periods for each securities house. This helped us understand the performance trends and identify any significant patterns or anomalies.
+Return Calculations
+With Python libraries like pandas and NumPy, I calculated the annualized returns for each period (12M, 18M, 24M). By centralizing the calculation scripts, I ensured consistency and accuracy across all four client portfolios.
+Risk Assessment (Sigma)
 
-Risk Assessment: For each portfolio, we determined the 12M sigma (risk), offering a clear picture of the volatility and risk levels associated with the clients' investments.
+I determined the standard deviation (sigma) for each portfolio over a 12-month window to gauge volatility. This statistical measure helped to see how much each portfolio’s returns could swing over time.
 
-Correlation Insights: Our analysis revealed interesting correlations within the portfolios, allowing us to understand the relationships between different securities and their impact on overall performance.
+Correlation Analysis & Modeling
+Using correlation matrices, I examined relationships between different assets in each portfolio. This step helped me see which securities moved together and which behaved independently. I also tested regression models to uncover how certain holdings could affect overall returns and risk.
 
-Recommendations
-Based on our analysis, we provided tailored recommendations for each client, focusing on:
+Forecasting & Scenario Evaluation
+To give clients a glimpse into future performance, I developed forecasting scripts based on historical data and key market indicators. This made it possible to evaluate how changes in market conditions might affect portfolio returns.
 
-Portfolio Optimization: Suggestions on which holdings to add to enhance the portfolio’s performance.
-Risk and Return Adjustments: Detailed projections on how the portfolio risk and expected returns will change after rebalancing, including the addition of new securities.
+Portfolio Optimization
+Drawing on Modern Portfolio Theory, I ran simulations in Python such as Monte Carlo analyses to see how adding or removing holdings would affect expected returns and volatility. This approach highlighted the best rebalancing strategies for each client’s goals and risk tolerance.
+Key Insights & Recommendations
+
+Return Patterns
+By comparing the 12M, 18M, and 24M performance of different securities, I uncovered which investments were consistently outperforming and which were lagging.
+
+Risk Levels
+I provided a clear snapshot of each portfolio’s volatility through the 12M sigma values. Clients could see exactly how much risk they were taking on and whether that risk aligned with their investment strategy.
+
+Diversification Opportunities
+The correlation analysis showed where portfolios could benefit from more diversification. For instance, if certain assets were highly correlated, it meant the client might consider balancing their portfolio to spread out potential risks.
+
+Actionable Investment Strategies
+I proposed tailored solutions for each client, suggesting which securities to add to improve returns and reduce risk. Using the forecasting data, I also demonstrated the expected change in each portfolio’s performance after rebalancing.
+
 Conclusion
-Our detailed analysis and insights enable clients to make informed decisions about their asset portfolios. By identifying key areas for improvement and potential risks, we help optimize their investment strategies for better returns and lower risk.
+Ultimately, I helped translate raw financial data into clear, actionable advice for these four clients. By using Python for data engineering, return and risk analysis, modeling, and forecasting, I could deliver recommendations that were both precise and easy to understand. This project not only guided clients toward better performance and lower volatility but also underscored how a data-driven approach can optimize asset portfolios in a fast-changing market.
+
+
+
+
+
+
+
